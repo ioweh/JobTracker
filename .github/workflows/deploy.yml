@@ -1,0 +1,44 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  MIX_ENV: prod
+  SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Elixir
+      uses: erlef/setup-elixir@v1
+      with:
+        elixir-version: 1.15.7
+        otp-version: 26
+
+    - name: Install dependencies
+      run: mix do deps.get, deps.compile, compile
+
+    - name: Build release
+      run: mix release
+
+    - name: Set up SSH
+      uses: webfactory/ssh-agent@v0.5.0
+      with:
+        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H 5.44.46.70 > ~/.ssh/known_hosts
+
+    - name: Deploy to production
+      run: |
+        tar czf - -C _build/prod/rel job_tracker | ssh root@5.44.46.70 'cat > /root/job_tracker.tar.gz'
+        ssh root@5.44.46.70 "cd /root && tar -zxvf job_tracker.tar.gz"
