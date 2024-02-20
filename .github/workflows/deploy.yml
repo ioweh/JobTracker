@@ -67,5 +67,10 @@ jobs:
         script: |
           docker stop job_tracker || true
           docker rm job_tracker || true
-          docker run -d --name job_tracker -p 4000:4000 -e DATABASE_URL="${{ secrets.DATABASE_URL }}" -e SECRET_KEY_BASE="${{ secrets.SECRET_KEY_BASE }}" olegilinets/job_tracker:latest
+          docker run -d --name job_tracker \
+            -p 4000:4000 \
+            --network host \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e SECRET_KEY_BASE="${{ secrets.SECRET_KEY_BASE }}" \
+            olegilinets/job_tracker:latest
 
