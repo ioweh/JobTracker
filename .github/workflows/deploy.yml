@@ -40,5 +40,5 @@ jobs:
 
     - name: Deploy to production
       run: |
-        tar czf - -C _build/prod/rel job_tracker | ssh root@5.44.46.70 'cat > /root/job_tracker.tar.gz'
-        ssh root@5.44.46.70 "cd /root && tar -zxvf job_tracker.tar.gz"
+        tar czf - . | ssh root@5.44.46.70 'cat > /root/job_tracker/job_tracker.tar.gz'
+        ssh root@5.44.46.70 "cd /root/job_tracker && tar -zxvf job_tracker.tar.gz"
