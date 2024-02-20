@@ -1,20 +1,16 @@
-name: Deploy to Production
+name: Build and Deploy Phoenix App
 
 on:
   push:
     branches:
       - main
 
-env:
-  MIX_ENV: prod
-  SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
-
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v3
 
     - name: Set up Elixir
@@ -23,22 +19,53 @@ jobs:
         elixir-version: 1.15.7
         otp-version: 26
 
-    - name: Install dependencies
-      run: mix do deps.get, deps.compile, compile
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 14
 
-    - name: Build release
+    - name: Install dependencies
+      run: |
+        mix local.hex --force
+        mix local.rebar --force
+        mix deps.get
+        npm install --prefix assets
+
+    - name: Build Phoenix release
       run: mix release
 
-    - name: Set up SSH
-      uses: webfactory/ssh-agent@v0.5.0
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      SECRET_KEY_BASE: ${{ secrets.SECRET_KEY_BASE }}
+
+    needs: build
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Login to Docker Hub
+      run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }} docker.io
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v2
       with:
-        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: olegilinets/job_tracker:latest
 
-    - name: Add server to known hosts
-      run: |
-        ssh-keyscan -H 5.44.46.70 > ~/.ssh/known_hosts
+    - name: Deploy to server using SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USERNAME }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        script: |
+          docker stop job_tracker || true
+          docker rm job_tracker || true
+          docker run -d --name job_tracker -p 4000:4000 -e DATABASE_URL="${{ secrets.DATABASE_URL }}" -e SECRET_KEY_BASE="${{ secrets.SECRET_KEY_BASE }}" olegilinets/job_tracker:latest
 
-    - name: Deploy to production
-      run: |
-        tar czf - . | ssh root@5.44.46.70 'cat > /root/job_tracker/job_tracker.tar.gz'
-        ssh root@5.44.46.70 "cd /root/job_tracker && tar -zxvf job_tracker.tar.gz"
